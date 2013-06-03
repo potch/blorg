@@ -1,0 +1,283 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1, maximum-scale=1">
+    <title>yay</title>
+    <style>
+      * {
+        -moz-box-sizing: border-box;
+        box-sizing: border-box;
+      }
+      html, body {
+        height: 100%;
+        padding: 0;
+        margin: 0;
+        background: #666;
+        transform-style: preserve-3d;
+        perspective: 2000px;
+        overflow: hidden;
+        font-family: sans-serif;
+      }
+      #in {
+        display: block;
+        width: 50%;
+        height: 100%;
+        position: absolute;
+        margin: 0;
+        padding: 0;
+        resize: none;
+        padding: 1em;
+      }
+      #notice {
+        position: absolute;
+        bottom: 1em;
+        right: 1em;
+        background: #ffc;
+        padding: .5em 1em;
+        z-index: 1;
+        transition: .5s opacity;
+        opacity: 0;
+      }
+      #notice.active {
+        opacity: 1;
+      }
+      #markup {
+        display: block;
+        position: absolute;
+        top: 0;
+        left: 50%;
+        right: 0;
+        bottom: 0;
+        overflow: auto;
+        padding: 1em;
+        font-family: monospace;
+        background: #fff;
+        white-space: pre-wrap;
+        transform: rotateY(180deg);
+        transition: .5s transform ease-out;
+        backface-visibility: hidden;
+      }
+      .showmarkup #markup {
+        transform: rotateY(0);
+      }
+      #out {
+        display: block;
+        position: absolute;
+        top: 0;
+        left: 50%;
+        right: 0;
+        bottom: 0;
+        overflow: auto;
+        padding: 1em;
+        background: #fff;
+        transition: .5s transform ease-out;
+        backface-visibility: hidden;
+      }
+      #load {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 100;
+        bottom: 10%;
+        right: 0;
+        padding: 1em;
+        background: #fff;
+        margin: auto;
+        width: 300px;
+        height: 64px;
+        box-shadow: 0 0 5px #000;
+        display: none;
+      }
+      #postname {
+        display: block;
+        width: 100%;
+        line-height: 1.4em;
+        font-size: 20px;
+      }
+      .showmarkup #out {
+        transform: rotateY(-180deg);
+      }
+
+      [data-mode="open"] #load {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <textarea id="in"></textarea>
+    <div id="markup">markup!</div>
+    <div id="out"></div>
+    <div id="notice">HEY</div>
+    <section id="load">
+      <input list="posts" id="postname">
+      <datalist id="posts"></datalist>
+    </section>
+    <script src="/marked.js"></script>
+    <script>
+
+      var input = document.querySelector('#in');
+      var out = document.querySelector('#out');
+      var markup = document.querySelector('#markup');
+
+      var today = new Date();
+      var currentPost = 'draft-' + [today.getFullYear(), today.getMonth() +1, today.getDate()+1].join('-') + '.md';
+
+      var postname= document.querySelector('#postname');
+
+      window.addEventListener('keydown', function(e) {
+        document.title = e.keyCode;
+        if(e.keyCode === 83 && e.metaKey) {
+          e.preventDefault();
+          save();
+        }
+        if (e.keyCode === 83 && e.shiftKey && e.metaKey) {
+          e.preventDefault();
+          var name = prompt('name for this post?', currentPost);
+          currentPost = name;
+          save();
+        }
+        if (e.keyCode === 79 && e.metaKey) {
+          e.preventDefault();
+          document.body.setAttribute('data-mode', 'open');
+          loadPosts();
+          postname.value = ''
+          postname.focus();
+        }
+        if(false && e.metaKey) {
+          document.body.classList.toggle('showmarkup');
+          isMarkup = document.body.classList.contains('showmarkup');
+        }
+      });
+
+      postname.addEventListener('keydown', function(e) {
+        if (e.keyCode === 13) {
+          document.body.setAttribute('data-mode', 'edit');
+          setTimeout(function() {
+            loadPost(postname.value);
+          }, 0);
+        }
+      });
+
+      var isMarkup = false;
+
+      var overIn = false;
+      input.addEventListener('mouseenter', function() {
+        overIn = true;
+      });
+      input.addEventListener('mouseleave', function() {
+        overIn = false;
+      });
+      input.onscroll = function scrollFromInput(e, force) {
+        if (overIn || force) {
+          var inpos = input.scrollTop/(input.scrollHeight-input.offsetHeight);
+          out.scrollTop = inpos * (out.scrollHeight-out.offsetHeight);
+        }
+      };
+
+      var overOut = false;
+      out.addEventListener('mouseenter', function() {
+        overOut = true;
+      });
+      out.addEventListener('mouseleave', function() {
+        overOut = false;
+      });
+      out.onscroll = function() {
+        if (overOut) {
+          var inpos = out.scrollTop/(out.scrollHeight-out.offsetHeight);
+          input.scrollTop = inpos * (input.scrollHeight-input.offsetHeight);
+        }
+      };
+
+      function render() {
+        var str = input.value;
+        if (isMarkup) {
+          markup.firstChild.nodeValue = marked(str);
+        } else {
+          out.innerHTML = marked(str);
+        }
+      }
+
+      function save() {
+        var req = new XMLHttpRequest();
+        req.onload = function(e) {
+          if (this.status === 200) {
+            notify('saved!');
+          } else {
+            notify('something went wrong.');
+          }
+        };
+        req.onerror = function() {
+          notify('something went wrong.');
+        }
+        req.open("post", "save/" + currentPost + "?" + encodeURIComponent(input.value));
+        req.send();
+      }
+
+      var to;
+      input.addEventListener('keydown', function() {
+        setTimeout(render, 0);
+        clearTimeout(to);
+        to = setTimeout(save, 1000);
+      });
+
+      var posts = document.querySelector('#posts');
+      function loadPosts() {
+        var req = new XMLHttpRequest();
+        req.onload = function(e) {
+          var files = JSON.parse(this.responseText);
+          var body = '';
+          files.forEach(function post(p) {
+            body += '<option value="' + p + '">' + p + "</option>";
+          });
+          posts.innerHTML = body;
+        };
+        req.open("get", "posts");
+        req.send();
+      }
+
+      function loadPost(name) {
+        var req = new XMLHttpRequest();
+        req.onload = function(e) {
+          if (this.status != 200) {
+            notify('error loading post');
+            return;
+          }
+          notify(name + ' loaded.');
+          input.value = this.responseText;
+          render();
+          currentPost = name;
+        };
+        req.open("get", "post/" + name);
+        req.send();
+      }
+
+      var notify = (function() {
+        var to;
+        var notice = document.querySelector('#notice');
+        return function notify(msg) {
+          notice.innerHTML = msg;
+          notice.classList.add('active');
+          clearTimeout(to);
+          to = setTimeout(function() {
+            notice.classList.remove('active');
+          }, 1000);
+        };
+      })();
+
+
+
+      window.onbeforeunload = function() {
+        localStorage.setItem('lastpost', currentPost);
+      }
+
+      loadPosts();
+      var lastPost = localStorage.getItem('lastpost');
+      if (lastPost) {
+        currentPost = lastPost;
+      }
+      loadPost(currentPost);
+
+    </script>
+  </body>
+</html>
